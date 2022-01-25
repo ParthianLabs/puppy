@@ -1,4 +1,5 @@
 import net, puppy/common, strutils, urlly, zippy
+import pkg/cooky
 
 export common, urlly
 
@@ -12,6 +13,7 @@ type
   Request* = ref object
     url*: Url
     headers*: seq[Header]
+    jar*: CookyJar
     timeout*: float32
     verb*: string
     body*: string
@@ -69,6 +71,10 @@ proc fetch*(req: Request): Response =
   result = Response()
 
   req.addDefaultHeaders()
+  if not req.jar.isNil() and req.jar.len > 0:
+    let cookys = req.jar.getCookys($req.url)
+    if cookys.len > 0:
+      req.headers["Cookie"] = $cookys
 
   if req.timeout == 0:
     req.timeout = 60
@@ -259,7 +265,10 @@ proc fetch*(req: Request): Response =
       if line != "":
         let parts = line.split(":", 1)
         if parts.len == 2:
-          result.headers.add(Header(key: parts[0].strip(), value: parts[1].strip()))
+          let header = Header(key: parts[0].strip(), value: parts[1].strip())
+          if not(req.jar.isNil()) and header.isCookySetter():
+            req.jar.incl(header.parseCooky())
+          result.headers.add header
 
     var i: int
     result.body.setLen(8192)
